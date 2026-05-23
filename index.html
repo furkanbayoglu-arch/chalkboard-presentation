@@ -126,6 +126,15 @@
               <button class="secondary-button" id="nextSlide">Sonraki</button>
               <button class="secondary-button" id="replaySlide">Tekrar Yaz</button>
             </div>
+            <div class="action-row">
+              <button class="secondary-button" id="drawingToggle">Cizim Modu</button>
+              <button class="secondary-button" id="clearDrawing">Cizimi Sil</button>
+              <button class="secondary-button" id="exportVideo">Video Olarak Kaydet</button>
+            </div>
+            <label class="brush-control">
+              Cizgi Kalinligi
+              <input id="brushSize" type="range" min="2" max="18" value="5" />
+            </label>
           </div>
         </aside>
 
@@ -142,6 +151,7 @@
             <div class="board board-green" id="board">
               <div class="board-overlay"></div>
               <div class="board-content" id="boardContent"></div>
+              <canvas class="drawing-canvas" id="drawingCanvas"></canvas>
               <div class="chalk-cursor" id="chalkCursor"></div>
             </div>
           </div>
@@ -150,6 +160,7 @@
             <span><code>[u]...[/u]</code> alt cizgi</span>
             <span><code>[c]...[/c]</code> daire</span>
             <span><code>[sari]</code>, <code>[mavi]</code>, <code>[pembe]</code>, <code>[yesil]</code></span>
+            <span>Mouse ile cizim ve .webm export desteklenir</span>
           </div>
         </main>
       </section>

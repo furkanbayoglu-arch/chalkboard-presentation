@@ -229,6 +229,13 @@ input[type="range"] {
   gap: 12px;
 }
 
+.brush-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+}
+
 .stage-panel {
   min-width: 0;
 }
@@ -302,6 +309,18 @@ input[type="range"] {
   min-height: 68vh;
 }
 
+.drawing-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.board.drawing-enabled .drawing-canvas {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
 .board-content .line {
   margin-bottom: 0.3em;
 }
@@ -350,7 +369,7 @@ input[type="range"] {
 }
 
 .chalk-cursor {
-  z-index: 3;
+  z-index: 4;
   left: 70px;
   top: 78px;
   background: var(--board-text);
@@ -364,6 +383,11 @@ input[type="range"] {
 .legend {
   margin-top: 14px;
   font-size: 0.92rem;
+}
+
+#drawingToggle.is-active {
+  background: linear-gradient(135deg, #b07a36, #8e5727);
+  color: white;
 }
 
 .board-green {

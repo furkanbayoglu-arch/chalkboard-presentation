@@ -12,6 +12,8 @@ https://furkanbayoglu-arch.github.io/chalkboard-presentation/
 - Slow chalk writing animation
 - Multiple board themes: green, black, white
 - Chalk color and font selection
+- Mouse drawing layer on each slide
+- WebM video export for the full presentation
 - Slide separation with `---`
 - Inline formatting:
   - `[u]text[/u]` underline
