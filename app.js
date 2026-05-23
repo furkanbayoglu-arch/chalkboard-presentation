@@ -70,9 +70,14 @@ const speedControl = document.getElementById("speedControl");
 const fontChoice = document.getElementById("fontChoice");
 const drawingToggle = document.getElementById("drawingToggle");
 const clearDrawingButton = document.getElementById("clearDrawing");
+const undoDrawingButton = document.getElementById("undoDrawing");
+const redoDrawingButton = document.getElementById("redoDrawing");
 const brushSizeInput = document.getElementById("brushSize");
 const exportButton = document.getElementById("exportVideo");
 const exportFormat = document.getElementById("exportFormat");
+const notesInput = document.getElementById("notesInput");
+const soundToggle = document.getElementById("soundToggle");
+const soundVolume = document.getElementById("soundVolume");
 const toolButtons = [...document.querySelectorAll(".tool-button")];
 const toolbarButtons = [...document.querySelectorAll(".toolbar button")];
 const templateButtons = [...document.querySelectorAll("[data-template]")];
@@ -84,11 +89,16 @@ const state = {
   isTyping: false,
   typingRunId: 0,
   drawings: [],
+  redoStacks: [],
+  slideNotes: [],
   isDrawingMode: false,
   isPointerDown: false,
   currentPath: null,
   exportInProgress: false,
-  currentTool: "chalk"
+  currentTool: "chalk",
+  soundEnabled: true,
+  audioContext: null,
+  drawingSoundTimer: null
 };
 
 const miniDemoText = "Merhaba!\nBu tahta senin yazdiklarini\nadim adim canlandirir.";
@@ -103,6 +113,96 @@ function parseSlides(source) {
 function ensureDrawingSlots() {
   state.drawings.length = state.slides.length;
   state.drawings = state.drawings.map((entry) => entry || []);
+  state.redoStacks.length = state.slides.length;
+  state.redoStacks = state.redoStacks.map((entry) => entry || []);
+  state.slideNotes.length = state.slides.length;
+  state.slideNotes = state.slideNotes.map((entry) => entry || "");
+}
+
+function saveCurrentNote() {
+  if (typeof state.slideIndex !== "number" || !state.slideNotes.length) {
+    return;
+  }
+  state.slideNotes[state.slideIndex] = notesInput.value;
+}
+
+function loadCurrentNote() {
+  notesInput.value = state.slideNotes[state.slideIndex] || "";
+}
+
+function ensureAudioContext() {
+  if (state.audioContext) {
+    return state.audioContext;
+  }
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) {
+    return null;
+  }
+  state.audioContext = new AudioCtor();
+  return state.audioContext;
+}
+
+function playChalkBurst(duration = 0.06) {
+  if (!state.soundEnabled) {
+    return;
+  }
+
+  const context = ensureAudioContext();
+  if (!context) {
+    return;
+  }
+
+  if (context.state === "suspended") {
+    context.resume();
+  }
+
+  const bufferSize = Math.max(1, Math.floor(context.sampleRate * duration));
+  const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  for (let index = 0; index < bufferSize; index += 1) {
+    const fade = 1 - index / bufferSize;
+    data[index] = (Math.random() * 2 - 1) * fade * 0.65;
+  }
+
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+
+  const filter = context.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 1500 + Math.random() * 1600;
+  filter.Q.value = 1.1;
+
+  const gain = context.createGain();
+  const volume = Number(soundVolume.value) / 100;
+  const now = context.currentTime;
+  gain.gain.setValueAtTime(volume * 0.08, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(context.destination);
+  source.start(now);
+  source.stop(now + duration);
+}
+
+function startContinuousDrawingSound() {
+  if (!state.soundEnabled) {
+    return;
+  }
+  stopContinuousDrawingSound();
+  state.drawingSoundTimer = window.setInterval(() => playChalkBurst(0.05), 70);
+}
+
+function stopContinuousDrawingSound() {
+  if (state.drawingSoundTimer) {
+    window.clearInterval(state.drawingSoundTimer);
+    state.drawingSoundTimer = null;
+  }
+}
+
+function updateSoundToggleLabel() {
+  soundToggle.textContent = state.soundEnabled ? "Tebesir Sesi: Acik" : "Tebesir Sesi: Kapali";
 }
 
 function parseInline(text) {
@@ -262,6 +362,7 @@ async function typeCurrentSlide() {
 
     token.style.opacity = "1";
     updateCursorNearToken(token);
+    playChalkBurst(0.04);
 
     if (token.dataset.char === "newline") {
       await delay(baseSpeed + 80);
@@ -278,6 +379,7 @@ async function typeCurrentSlide() {
 }
 
 function loadSlidesAndPlay() {
+  saveCurrentNote();
   state.slides = parseSlides(slideInput.value);
   if (!state.slides.length) {
     state.slides = [templates.default];
@@ -287,6 +389,7 @@ function loadSlidesAndPlay() {
     state.slideIndex = 0;
   }
   ensureDrawingSlots();
+  loadCurrentNote();
   typeCurrentSlide();
 }
 
@@ -302,11 +405,35 @@ function clearCurrentDrawing() {
   if (!state.drawings[state.slideIndex]) {
     return;
   }
+  if (state.drawings[state.slideIndex].length) {
+    state.redoStacks[state.slideIndex] = [];
+  }
   state.drawings[state.slideIndex] = [];
   redrawCurrentSlideDrawing();
 }
 
+function undoDrawing() {
+  const entries = state.drawings[state.slideIndex] || [];
+  if (!entries.length) {
+    return;
+  }
+  const removed = entries.pop();
+  state.redoStacks[state.slideIndex].push(removed);
+  redrawCurrentSlideDrawing();
+}
+
+function redoDrawing() {
+  const entries = state.redoStacks[state.slideIndex] || [];
+  if (!entries.length) {
+    return;
+  }
+  const restored = entries.pop();
+  state.drawings[state.slideIndex].push(restored);
+  redrawCurrentSlideDrawing();
+}
+
 function moveSlide(direction) {
+  saveCurrentNote();
   if (!state.slides.length) {
     state.slides = parseSlides(slideInput.value);
     ensureDrawingSlots();
@@ -315,6 +442,7 @@ function moveSlide(direction) {
     return;
   }
   state.slideIndex = (state.slideIndex + direction + state.slides.length) % state.slides.length;
+  loadCurrentNote();
   typeCurrentSlide();
 }
 
@@ -500,6 +628,7 @@ function beginDrawing(event) {
   event.preventDefault();
   const point = getCanvasPoint(event);
   state.isPointerDown = true;
+  state.redoStacks[state.slideIndex] = [];
   const isStrokeTool = state.currentTool === "chalk" || state.currentTool === "eraser";
   const entry = isStrokeTool ? {
     type: "stroke",
@@ -519,6 +648,7 @@ function beginDrawing(event) {
   state.currentPath = entry;
   if (isStrokeTool) {
     state.drawings[state.slideIndex].push(entry);
+    startContinuousDrawingSound();
   }
 }
 
@@ -532,6 +662,7 @@ function moveDrawing(event) {
     state.currentPath.points.push(point);
   } else {
     state.currentPath.end = point;
+    playChalkBurst(0.03);
   }
   redrawCurrentSlideDrawing();
 }
@@ -539,9 +670,11 @@ function moveDrawing(event) {
 function endDrawing() {
   if (state.currentPath && state.currentPath.type !== "stroke") {
     state.drawings[state.slideIndex].push({ ...state.currentPath });
+    playChalkBurst(0.08);
   }
   state.isPointerDown = false;
   state.currentPath = null;
+  stopContinuousDrawingSound();
   redrawCurrentSlideDrawing();
 }
 
@@ -823,6 +956,7 @@ async function recordPresentationVideo() {
     return;
   }
 
+  saveCurrentNote();
   state.slides = parseSlides(slideInput.value);
   if (!state.slides.length) {
     state.slides = [templates.default];
@@ -927,11 +1061,21 @@ prevButton.addEventListener("click", () => moveSlide(-1));
 replayButton.addEventListener("click", () => typeCurrentSlide());
 clearButton.addEventListener("click", clearBoard);
 clearDrawingButton.addEventListener("click", clearCurrentDrawing);
+undoDrawingButton.addEventListener("click", undoDrawing);
+redoDrawingButton.addEventListener("click", redoDrawing);
 boardTheme.addEventListener("change", applyBoardTheme);
 chalkColor.addEventListener("input", applyBoardTheme);
 fontChoice.addEventListener("change", applyBoardTheme);
 drawingToggle.addEventListener("click", () => setDrawingMode(!state.isDrawingMode));
 exportButton.addEventListener("click", recordPresentationVideo);
+notesInput.addEventListener("input", saveCurrentNote);
+soundToggle.addEventListener("click", () => {
+  state.soundEnabled = !state.soundEnabled;
+  updateSoundToggleLabel();
+  if (!state.soundEnabled) {
+    stopContinuousDrawingSound();
+  }
+});
 toolButtons.forEach((button) => {
   button.addEventListener("click", () => setCurrentTool(button.dataset.tool));
 });
@@ -966,4 +1110,6 @@ applyBoardTheme();
 startMiniDemo();
 syncCanvasResolution();
 setCurrentTool("chalk");
+updateSoundToggleLabel();
+loadCurrentNote();
 typeCurrentSlide();

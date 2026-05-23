@@ -236,6 +236,20 @@ input[type="range"] {
   color: var(--muted);
 }
 
+.inline-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inline-control input[type="range"] {
+  flex: 1;
+}
+
+.notes-input {
+  min-height: 180px;
+}
+
 .tool-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -15,6 +15,9 @@ https://furkanbayoglu-arch.github.io/chalkboard-presentation/
 - Mouse drawing layer on each slide
 - Eraser and shape tools: rectangle, ellipse, arrow
 - WebM video export for the full presentation
+- Undo/redo for drawing steps
+- Slide-specific speaker notes
+- Toggleable chalk sound with volume control
 - Slide separation with `---`
 - Inline formatting:
   - `[u]text[/u]` underline
