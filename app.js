@@ -72,6 +72,8 @@ const drawingToggle = document.getElementById("drawingToggle");
 const clearDrawingButton = document.getElementById("clearDrawing");
 const brushSizeInput = document.getElementById("brushSize");
 const exportButton = document.getElementById("exportVideo");
+const exportFormat = document.getElementById("exportFormat");
+const toolButtons = [...document.querySelectorAll(".tool-button")];
 const toolbarButtons = [...document.querySelectorAll(".toolbar button")];
 const templateButtons = [...document.querySelectorAll("[data-template]")];
 const drawingContext = drawingCanvas.getContext("2d");
@@ -85,7 +87,8 @@ const state = {
   isDrawingMode: false,
   isPointerDown: false,
   currentPath: null,
-  exportInProgress: false
+  exportInProgress: false,
+  currentTool: "chalk"
 };
 
 const miniDemoText = "Merhaba!\nBu tahta senin yazdiklarini\nadim adim canlandirir.";
@@ -353,24 +356,45 @@ function getCanvasPoint(event) {
   };
 }
 
-function drawPathOnContext(ctx, path, options = {}) {
-  if (!path || path.points.length < 2) {
+function drawArrowHead(ctx, from, to, lineWidth) {
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const headLength = Math.max(12, lineWidth * 3.2);
+  ctx.beginPath();
+  ctx.moveTo(to.x, to.y);
+  ctx.lineTo(
+    to.x - headLength * Math.cos(angle - Math.PI / 7),
+    to.y - headLength * Math.sin(angle - Math.PI / 7)
+  );
+  ctx.moveTo(to.x, to.y);
+  ctx.lineTo(
+    to.x - headLength * Math.cos(angle + Math.PI / 7),
+    to.y - headLength * Math.sin(angle + Math.PI / 7)
+  );
+  ctx.stroke();
+}
+
+function drawStrokeEntry(ctx, entry, options = {}) {
+  if (!entry || entry.points.length < 2) {
     return;
   }
 
   const scaleX = options.scaleX || 1;
   const scaleY = options.scaleY || 1;
+  const lineWidth = entry.size * (options.scaleStroke || 1);
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = path.color;
+  ctx.strokeStyle = entry.color;
   ctx.globalAlpha = 0.95;
-  ctx.lineWidth = path.size * (options.scaleStroke || 1);
+  ctx.lineWidth = lineWidth;
+  if (entry.mode === "erase") {
+    ctx.globalCompositeOperation = "destination-out";
+  }
   ctx.beginPath();
-  ctx.moveTo(path.points[0].x * scaleX, path.points[0].y * scaleY);
+  ctx.moveTo(entry.points[0].x * scaleX, entry.points[0].y * scaleY);
 
-  for (let index = 1; index < path.points.length; index += 1) {
-    const point = path.points[index];
+  for (let index = 1; index < entry.points.length; index += 1) {
+    const point = entry.points[index];
     ctx.lineTo(point.x * scaleX, point.y * scaleY);
   }
 
@@ -378,11 +402,79 @@ function drawPathOnContext(ctx, path, options = {}) {
   ctx.restore();
 }
 
+function drawShapeEntry(ctx, entry, options = {}) {
+  if (!entry || !entry.start || !entry.end) {
+    return;
+  }
+
+  const scaleX = options.scaleX || 1;
+  const scaleY = options.scaleY || 1;
+  const scaleStroke = options.scaleStroke || 1;
+  const start = { x: entry.start.x * scaleX, y: entry.start.y * scaleY };
+  const end = { x: entry.end.x * scaleX, y: entry.end.y * scaleY };
+  const width = end.x - start.x;
+  const height = end.y - start.y;
+
+  ctx.save();
+  ctx.strokeStyle = entry.color;
+  ctx.lineWidth = entry.size * scaleStroke;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (entry.type === "rectangle") {
+    ctx.strokeRect(start.x, start.y, width, height);
+  } else if (entry.type === "ellipse") {
+    ctx.beginPath();
+    ctx.ellipse(
+      start.x + width / 2,
+      start.y + height / 2,
+      Math.abs(width / 2),
+      Math.abs(height / 2),
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.stroke();
+  } else if (entry.type === "arrow") {
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    drawArrowHead(ctx, start, end, entry.size * scaleStroke);
+  }
+
+  ctx.restore();
+}
+
+function drawEntryOnContext(ctx, entry, options = {}) {
+  if (!entry) {
+    return;
+  }
+
+  if (entry.type === "stroke") {
+    drawStrokeEntry(ctx, entry, options);
+    return;
+  }
+
+  drawShapeEntry(ctx, entry, options);
+}
+
+function renderEntriesOnContext(ctx, entries, options = {}) {
+  entries.forEach((entry) => drawEntryOnContext(ctx, entry, options));
+}
+
 function redrawCurrentSlideDrawing() {
   const rect = drawingCanvas.getBoundingClientRect();
   drawingContext.clearRect(0, 0, rect.width, rect.height);
   const drawing = state.drawings[state.slideIndex] || [];
-  drawing.forEach((path) => drawPathOnContext(drawingContext, path));
+  renderEntriesOnContext(drawingContext, drawing);
+  if (
+    state.currentPath &&
+    state.currentPath.slideIndex === state.slideIndex &&
+    state.currentPath.type !== "stroke"
+  ) {
+    drawEntryOnContext(drawingContext, state.currentPath);
+  }
 }
 
 function setDrawingMode(enabled) {
@@ -393,6 +485,13 @@ function setDrawingMode(enabled) {
   setStatus(enabled ? "Cizim modu acik" : "Hazir");
 }
 
+function setCurrentTool(tool) {
+  state.currentTool = tool;
+  toolButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.tool === tool);
+  });
+}
+
 function beginDrawing(event) {
   if (!state.isDrawingMode || state.exportInProgress) {
     return;
@@ -401,13 +500,26 @@ function beginDrawing(event) {
   event.preventDefault();
   const point = getCanvasPoint(event);
   state.isPointerDown = true;
-  state.currentPath = {
+  const isStrokeTool = state.currentTool === "chalk" || state.currentTool === "eraser";
+  const entry = isStrokeTool ? {
+    type: "stroke",
     color: chalkColor.value,
     size: Number(brushSizeInput.value),
+    mode: state.currentTool === "eraser" ? "erase" : "draw",
     points: [point]
+  } : {
+    type: state.currentTool,
+    color: chalkColor.value,
+    size: Number(brushSizeInput.value),
+    start: point,
+    end: point
   };
 
-  state.drawings[state.slideIndex].push(state.currentPath);
+  entry.slideIndex = state.slideIndex;
+  state.currentPath = entry;
+  if (isStrokeTool) {
+    state.drawings[state.slideIndex].push(entry);
+  }
 }
 
 function moveDrawing(event) {
@@ -416,13 +528,21 @@ function moveDrawing(event) {
   }
   event.preventDefault();
   const point = getCanvasPoint(event);
-  state.currentPath.points.push(point);
+  if (state.currentPath.type === "stroke") {
+    state.currentPath.points.push(point);
+  } else {
+    state.currentPath.end = point;
+  }
   redrawCurrentSlideDrawing();
 }
 
 function endDrawing() {
+  if (state.currentPath && state.currentPath.type !== "stroke") {
+    state.drawings[state.slideIndex].push({ ...state.currentPath });
+  }
   state.isPointerDown = false;
   state.currentPath = null;
+  redrawCurrentSlideDrawing();
 }
 
 function collectCharTokens(lineText) {
@@ -661,9 +781,41 @@ function renderSlideToCanvas(ctx, width, height, slideText, visibleChars) {
   const boardRect = board.getBoundingClientRect();
   const scaleX = width / boardRect.width;
   const scaleY = height / boardRect.height;
-  (state.drawings[state.slideIndex] || []).forEach((path) => {
-    drawPathOnContext(ctx, path, { scaleX, scaleY, scaleStroke: scaleX });
+  const overlayCanvas = document.createElement("canvas");
+  overlayCanvas.width = width;
+  overlayCanvas.height = height;
+  const overlayContext = overlayCanvas.getContext("2d");
+  renderEntriesOnContext(overlayContext, state.drawings[state.slideIndex] || [], {
+    scaleX,
+    scaleY,
+    scaleStroke: scaleX
   });
+  ctx.drawImage(overlayCanvas, 0, 0);
+}
+
+function pickRecordingFormat() {
+  const choice = exportFormat.value;
+  const candidates = choice === "mp4"
+    ? [
+        { mimeType: "video/mp4;codecs=h264", extension: "mp4" },
+        { mimeType: "video/mp4", extension: "mp4" }
+      ]
+    : choice === "webm"
+      ? [
+          { mimeType: "video/webm;codecs=vp9", extension: "webm" },
+          { mimeType: "video/webm;codecs=vp8", extension: "webm" },
+          { mimeType: "video/webm", extension: "webm" }
+        ]
+      : [
+          { mimeType: "video/mp4;codecs=h264", extension: "mp4" },
+          { mimeType: "video/mp4", extension: "mp4" },
+          { mimeType: "video/webm;codecs=vp9", extension: "webm" },
+          { mimeType: "video/webm;codecs=vp8", extension: "webm" },
+          { mimeType: "video/webm", extension: "webm" }
+        ];
+
+  const supported = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate.mimeType));
+  return supported || { mimeType: "", extension: "webm" };
 }
 
 async function recordPresentationVideo() {
@@ -686,7 +838,10 @@ async function recordPresentationVideo() {
   exportCanvas.height = 1080;
   const exportContext = exportCanvas.getContext("2d");
   const stream = exportCanvas.captureStream(30);
-  const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
+  const format = pickRecordingFormat();
+  const recorder = format.mimeType
+    ? new MediaRecorder(stream, { mimeType: format.mimeType })
+    : new MediaRecorder(stream);
   const chunks = [];
 
   recorder.addEventListener("dataavailable", (event) => {
@@ -721,18 +876,24 @@ async function recordPresentationVideo() {
   recorder.stop();
   await finished;
 
-  const blob = new Blob(chunks, { type: "video/webm" });
+  const blobType = format.mimeType || recorder.mimeType || "video/webm";
+  const blob = new Blob(chunks, { type: blobType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "chalkboard-presentation.webm";
+  anchor.download = `chalkboard-presentation.${format.extension}`;
   anchor.click();
 
   setTimeout(() => URL.revokeObjectURL(url), 2000);
   state.slideIndex = originalSlideIndex;
   exportButton.disabled = false;
   state.exportInProgress = false;
-  setStatus(state.isDrawingMode ? "Cizim modu acik" : "Hazir");
+  const preferredMp4 = exportFormat.value === "mp4" || exportFormat.value === "auto";
+  if (preferredMp4 && format.extension !== "mp4") {
+    setStatus("MP4 desteklenmedi, WebM indirildi");
+  } else {
+    setStatus(state.isDrawingMode ? "Cizim modu acik" : "Hazir");
+  }
   typeCurrentSlide();
 }
 
@@ -771,6 +932,9 @@ chalkColor.addEventListener("input", applyBoardTheme);
 fontChoice.addEventListener("change", applyBoardTheme);
 drawingToggle.addEventListener("click", () => setDrawingMode(!state.isDrawingMode));
 exportButton.addEventListener("click", recordPresentationVideo);
+toolButtons.forEach((button) => {
+  button.addEventListener("click", () => setCurrentTool(button.dataset.tool));
+});
 
 drawingCanvas.addEventListener("pointerdown", beginDrawing);
 drawingCanvas.addEventListener("pointermove", moveDrawing);
@@ -801,4 +965,5 @@ updateSlideIndicator();
 applyBoardTheme();
 startMiniDemo();
 syncCanvasResolution();
+setCurrentTool("chalk");
 typeCurrentSlide();

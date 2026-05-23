@@ -131,9 +131,24 @@
               <button class="secondary-button" id="clearDrawing">Cizimi Sil</button>
               <button class="secondary-button" id="exportVideo">Video Olarak Kaydet</button>
             </div>
+            <div class="tool-grid">
+              <button class="secondary-button tool-button is-active" data-tool="chalk">Kalem</button>
+              <button class="secondary-button tool-button" data-tool="eraser">Silgi</button>
+              <button class="secondary-button tool-button" data-tool="rectangle">Dikdortgen</button>
+              <button class="secondary-button tool-button" data-tool="ellipse">Oval</button>
+              <button class="secondary-button tool-button" data-tool="arrow">Ok</button>
+            </div>
             <label class="brush-control">
               Cizgi Kalinligi
               <input id="brushSize" type="range" min="2" max="18" value="5" />
+            </label>
+            <label class="brush-control">
+              Video Formati
+              <select id="exportFormat">
+                <option value="auto">Otomatik</option>
+                <option value="mp4">MP4 dene</option>
+                <option value="webm">WebM</option>
+              </select>
             </label>
           </div>
         </aside>
@@ -160,7 +175,7 @@
             <span><code>[u]...[/u]</code> alt cizgi</span>
             <span><code>[c]...[/c]</code> daire</span>
             <span><code>[sari]</code>, <code>[mavi]</code>, <code>[pembe]</code>, <code>[yesil]</code></span>
-            <span>Mouse ile cizim ve .webm export desteklenir</span>
+            <span>Kalem, silgi ve sekil araclari desteklenir</span>
           </div>
         </main>
       </section>

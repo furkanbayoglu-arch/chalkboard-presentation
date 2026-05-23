@@ -13,6 +13,7 @@ https://furkanbayoglu-arch.github.io/chalkboard-presentation/
 - Multiple board themes: green, black, white
 - Chalk color and font selection
 - Mouse drawing layer on each slide
+- Eraser and shape tools: rectangle, ellipse, arrow
 - WebM video export for the full presentation
 - Slide separation with `---`
 - Inline formatting:

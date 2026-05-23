@@ -236,6 +236,12 @@ input[type="range"] {
   color: var(--muted);
 }
 
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .stage-panel {
   min-width: 0;
 }
@@ -388,6 +394,12 @@ input[type="range"] {
 #drawingToggle.is-active {
   background: linear-gradient(135deg, #b07a36, #8e5727);
   color: white;
+}
+
+.tool-button.is-active {
+  background: rgba(176, 122, 54, 0.18);
+  color: #7b4619;
+  outline: 1px solid rgba(176, 122, 54, 0.24);
 }
 
 .board-green {
